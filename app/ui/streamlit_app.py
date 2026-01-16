@@ -1,8 +1,9 @@
 # app/ui/streamlit_app.py
 
 import os
-import requests
+
 import pandas as pd
+import requests
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -11,7 +12,7 @@ load_dotenv()
 API_URL = os.getenv("AI_MARKET_COACH_API_URL", "http://127.0.0.1:8000")
 
 
-def call_analyze_api(ticker: str, period: str, interval: str, user_level: str):
+def call_analyze_api(ticker: str, period: str, interval: str, user_level: str) -> dict:
     url = f"{API_URL}/analyze"
     payload = {
         "ticker": ticker,
@@ -24,116 +25,192 @@ def call_analyze_api(ticker: str, period: str, interval: str, user_level: str):
     return resp.json()
 
 
+def _ensure_state():
+    """
+    Streamlit reruns the script on every widget interaction.
+    We store the latest API result in session_state so quiz clicks
+    won't wipe the report and force you to click Analyze again.
+    """
+    if "analysis_result" not in st.session_state:
+        st.session_state.analysis_result = None
+    if "analyze_error" not in st.session_state:
+        st.session_state.analyze_error = None
+    if "last_payload" not in st.session_state:
+        st.session_state.last_payload = None
+
+
 def main():
     st.set_page_config(
         page_title="AI Market Coach",
         layout="wide",
     )
 
+    _ensure_state()
+
     st.title("📈 AI Market Coach")
     st.caption(
         "Educational-only stock learning assistant with quizzes & flashcards (no investment advice)."
     )
 
+    # ------------------------------
+    # Sidebar inputs (use a FORM)
+    # ------------------------------
     with st.sidebar:
         st.header("Settings")
-        ticker = st.text_input("Ticker symbol", value="AAPL")
+
+        ticker = st.text_input("Ticker symbol", value="AAPL").strip().upper()
         period = st.selectbox("History period", ["6mo", "1y", "2y", "5y"], index=1)
         interval = st.selectbox("Interval", ["1d", "1wk", "1mo"], index=0)
         user_level = st.selectbox(
             "Your experience level", ["Beginner", "Intermediate", "Advanced"], index=0
         )
-        run_button = st.button("Analyze")
 
+        # Using a form prevents weird "button resets" and keeps the UX clean.
+        with st.form("analyze_form", clear_on_submit=False):
+            run_button = st.form_submit_button("Analyze")
+
+        st.write("API:", API_URL)
+
+    # ------------------------------
+    # Run analysis (store in state)
+    # ------------------------------
     if run_button:
-        if not ticker.strip():
-            st.error("Please enter a ticker.")
-            return
+        if not ticker:
+            st.session_state.analysis_result = None
+            st.session_state.analyze_error = "Please enter a ticker."
+        else:
+            st.session_state.analyze_error = None
+            payload = {
+                "ticker": ticker,
+                "period": period,
+                "interval": interval,
+                "user_level": user_level,
+            }
+            st.session_state.last_payload = payload
 
-        with st.spinner("Analyzing and generating learning materials..."):
-            try:
-                data = call_analyze_api(ticker, period, interval, user_level)
-            except Exception as e:
-                st.error(f"Error calling API: {e}")
-                return
+            with st.spinner("Analyzing and generating learning materials..."):
+                try:
+                    st.session_state.analysis_result = call_analyze_api(
+                        ticker, period, interval, user_level
+                    )
+                except Exception as e:
+                    st.session_state.analysis_result = None
+                    st.session_state.analyze_error = f"Error calling API: {e}"
 
-        # Layout
-        col1, col2 = st.columns([1.2, 1])
+    # ------------------------------
+    # Render errors (if any)
+    # ------------------------------
+    if st.session_state.analyze_error:
+        st.error(st.session_state.analyze_error)
 
-        # --- Left: Report
-        with col1:
-            st.subheader("📘 Learning Report")
-            st.markdown(data["report_markdown"])
+    # ------------------------------
+    # Render results from session_state
+    # ------------------------------
+    data = st.session_state.analysis_result
+    if data is None:
+        st.info("Enter settings and click **Analyze** to generate a learning report.")
+        return
 
-        # --- Right: Metrics & quiz
-        with col2:
-            st.subheader("📊 Quick Metrics")
-            pm = data["analysis"]["price_metrics"]
-            metrics_df = pd.DataFrame(
-                {
-                    "Metric": [
-                        "Last Price",
-                        "Start Price",
-                        "Period Return (%)",
-                        "Daily Volatility (%)",
-                        "Annualized Volatility (%)",
-                        "Max Drawdown (%)",
-                        "Mean Daily Return (%)",
-                        "Min Price",
-                        "Max Price",
-                    ],
-                    "Value": [
-                        pm["last_price"],
-                        pm["start_price"],
-                        pm["period_return_pct"],
-                        pm["daily_volatility_pct"],
-                        pm["annualized_volatility_pct"],
-                        pm["max_drawdown_pct"],
-                        pm["mean_daily_return_pct"],
-                        pm["min_price"],
-                        pm["max_price"],
-                    ],
-                }
-            )
-            st.dataframe(metrics_df, hide_index=True)
+    # Layout
+    col1, col2 = st.columns([1.2, 1])
 
-            st.markdown("---")
-            st.subheader("🧠 Quiz Yourself")
-            for idx, q in enumerate(data["quiz"]):
-                with st.expander(f"Question {idx+1}: {q['question']}"):
+    # --- Left: Report
+    with col1:
+        st.subheader("📘 Learning Report")
+        st.markdown(data.get("report_markdown", ""))
+
+    # --- Right: Metrics & quiz
+    with col2:
+        st.subheader("📊 Quick Metrics")
+
+        analysis = data.get("analysis", {}) or {}
+        pm = analysis.get("price_metrics", {}) or {}
+
+        # Safer gets (avoid KeyError if a field is missing)
+        metrics_df = pd.DataFrame(
+            {
+                "Metric": [
+                    "Last Price",
+                    "Start Price",
+                    "Period Return (%)",
+                    "Daily Volatility (%)",
+                    "Annualized Volatility (%)",
+                    "Max Drawdown (%)",
+                    "Mean Daily Return (%)",
+                    "Min Price",
+                    "Max Price",
+                ],
+                "Value": [
+                    pm.get("last_price"),
+                    pm.get("start_price"),
+                    pm.get("period_return_pct"),
+                    pm.get("daily_volatility_pct"),
+                    pm.get("annualized_volatility_pct"),
+                    pm.get("max_drawdown_pct"),
+                    pm.get("mean_daily_return_pct"),
+                    pm.get("min_price"),
+                    pm.get("max_price"),
+                ],
+            }
+        )
+        st.dataframe(metrics_df, hide_index=True)
+
+        st.markdown("---")
+        st.subheader("🧠 Quiz Yourself")
+
+        quiz = data.get("quiz", []) or []
+        if not quiz:
+            st.write("No quiz questions generated.")
+        else:
+            for idx, q in enumerate(quiz):
+                q_text = q.get("question", f"Question {idx + 1}")
+                options = q.get("options", []) or []
+
+                with st.expander(f"Question {idx + 1}: {q_text}", expanded=False):
+                    # IMPORTANT:
+                    # - stable unique keys for each widget
+                    # - do NOT use list(enumerate()) as options; it can confuse Streamlit state
                     selected = st.radio(
                         "Choose an answer:",
-                        list(enumerate(q["options"])),
-                        format_func=lambda t: f"{chr(65 + t[0])}. {t[1]}",
-                        key=f"quiz-{idx}",
+                        options,
+                        key=f"quiz_choice_{idx}",
                     )
-                    show_answer = st.checkbox("Show answer", key=f"ans-{idx}")
-                    if show_answer:
-                        correct_idx = q["correct_option_index"]
+
+                    show_answer = st.checkbox("Show answer", key=f"quiz_show_{idx}")
+                    if show_answer and options:
+                        correct_idx = int(q.get("correct_option_index", 0) or 0)
+                        correct_idx = max(0, min(correct_idx, len(options) - 1))
                         st.markdown(
-                            f"**Correct answer:** {chr(65 + correct_idx)}. {q['options'][correct_idx]}"
+                            f"**Correct answer:** {chr(65 + correct_idx)}. {options[correct_idx]}"
                         )
-                        st.info(q["explanation"])
+                        explanation = q.get("explanation", "")
+                        if explanation:
+                            st.info(explanation)
 
-            st.markdown("---")
-            st.subheader("🗂 Flashcards")
-            flashcards = data["flashcards"]
-            if not flashcards:
-                st.write("No flashcards generated.")
-            else:
-                for i, card in enumerate(flashcards):
-                    with st.expander(f"Card {i+1}: {card['front']}"):
-                        st.write(card["back"])
+        st.markdown("---")
+        st.subheader("🗂 Flashcards")
 
-                # Export flashcards as JSON
-                st.download_button(
-                    label="Download flashcards (JSON)",
-                    data=pd.DataFrame(flashcards).to_json(orient="records", indent=2),
-                    file_name=f"{ticker.upper()}_flashcards.json",
-                    mime="application/json",
-                )
+        flashcards = data.get("flashcards", []) or []
+        if not flashcards:
+            st.write("No flashcards generated.")
+        else:
+            for i, card in enumerate(flashcards):
+                front = card.get("front", f"Card {i + 1}")
+                back = card.get("back", "")
+                with st.expander(f"Card {i + 1}: {front}"):
+                    st.write(back)
 
-        st.markdown(f"> **Disclaimer:** {data['disclaimer']}")
+            # Export flashcards as JSON
+            st.download_button(
+                label="Download flashcards (JSON)",
+                data=pd.DataFrame(flashcards).to_json(orient="records", indent=2),
+                file_name=f"{(analysis.get('ticker') or 'TICKER').upper()}_flashcards.json",
+                mime="application/json",
+            )
+
+    disclaimer = data.get("disclaimer", "")
+    if disclaimer:
+        st.markdown(f"> **Disclaimer:** {disclaimer}")
 
 
 if __name__ == "__main__":

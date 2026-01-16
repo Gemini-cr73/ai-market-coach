@@ -1,4 +1,5 @@
 # app/core/analysis.py
+from __future__ import annotations
 
 from datetime import datetime
 
@@ -11,8 +12,9 @@ def get_price_history(
     ticker: str, period: str = "1y", interval: str = "1d"
 ) -> pd.DataFrame:
     """
-    Download historical price data for a U.S. equity using yfinance.
-    Auto-adjusts for splits/dividends.
+    Download historical price data using yfinance.
+    auto_adjust=True often removes 'Adj Close' and adjusts OHLC.
+    Depending on versions, columns can vary, so we normalize later.
     """
     data = yf.download(
         ticker,
@@ -20,39 +22,89 @@ def get_price_history(
         interval=interval,
         auto_adjust=True,
         progress=False,
+        group_by="column",
     )
-    if data.empty:
+
+    if data is None or data.empty:
         raise ValueError(f"No price data found for ticker '{ticker}'.")
+
     return data
+
+
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    yfinance sometimes returns MultiIndex columns, especially in certain setups.
+    This flattens them so we can safely reference OHLC columns.
+    """
+    if isinstance(df.columns, pd.MultiIndex):
+        # Typical MultiIndex: ('Close', 'AAPL') or ('AAPL', 'Close') depending on version
+        # We'll join with '_' then later search for close-like columns.
+        df = df.copy()
+        df.columns = [
+            "_".join([str(x) for x in col if x is not None]).strip()
+            for col in df.columns.values
+        ]
+    return df
+
+
+def _extract_close_series(price_df: pd.DataFrame) -> pd.Series:
+    """
+    Return a 'close' price series from a yfinance DataFrame, handling
+    different column layouts and names.
+    """
+    df = _normalize_columns(price_df)
+
+    # Most common cases
+    if "Close" in df.columns:
+        return df["Close"]
+    if "Adj Close" in df.columns:
+        return df["Adj Close"]
+
+    # MultiIndex flattened cases might look like: "Close_AAPL" or "AAPL_Close"
+    close_candidates = [c for c in df.columns if "close" in c.lower()]
+
+    # Prefer something that looks like "Close_*" over "*_Close"
+    close_candidates_sorted = sorted(
+        close_candidates,
+        key=lambda c: (0 if c.lower().startswith("close") else 1, len(c)),
+    )
+
+    if close_candidates_sorted:
+        return df[close_candidates_sorted[0]]
+
+    raise ValueError(
+        f"Price data is missing a close column. Available columns: {list(df.columns)}"
+    )
 
 
 def compute_price_metrics(price_df: pd.DataFrame) -> dict:
     """
-    Compute basic price & risk metrics from a historical price DataFrame.
-    Expects an index of dates and a 'Close' column.
+    Compute basic price & risk metrics from historical price data.
+    Robust to different yfinance column layouts.
     """
-    close = price_df["Close"]
+    close = _extract_close_series(price_df).dropna()
+    if close.empty:
+        raise ValueError("Close series is empty after dropping NA values.")
+
     returns = close.pct_change().dropna()
 
     metrics: dict = {}
 
-    # Basic price info
     metrics["last_price"] = float(close.iloc[-1])
     metrics["start_price"] = float(close.iloc[0])
     metrics["period_return_pct"] = float((close.iloc[-1] / close.iloc[0] - 1) * 100)
 
-    # Volatility (daily & annualized)
-    daily_vol = returns.std()
+    daily_vol = returns.std() if not returns.empty else 0.0
     metrics["daily_volatility_pct"] = float(daily_vol * 100)
     metrics["annualized_volatility_pct"] = float(daily_vol * np.sqrt(252) * 100)
 
-    # Max drawdown
     running_max = close.cummax()
     drawdown = (close - running_max) / running_max
     metrics["max_drawdown_pct"] = float(drawdown.min() * 100)
 
-    # Simple stats
-    metrics["mean_daily_return_pct"] = float(returns.mean() * 100)
+    metrics["mean_daily_return_pct"] = float(
+        (returns.mean() * 100) if not returns.empty else 0.0
+    )
     metrics["min_price"] = float(close.min())
     metrics["max_price"] = float(close.max())
 
@@ -61,13 +113,12 @@ def compute_price_metrics(price_df: pd.DataFrame) -> dict:
 
 def get_company_snapshot(ticker: str) -> dict:
     """
-    Get basic company info (name, sector, etc.) and key fundamentals.
-    Uses yfinance.Ticker.info (good enough for v1).
+    Get basic company info and key fundamentals.
     """
     t = yf.Ticker(ticker)
     info = t.info or {}
 
-    snapshot = {
+    return {
         "ticker": ticker.upper(),
         "short_name": info.get("shortName"),
         "long_name": info.get("longName"),
@@ -82,14 +133,9 @@ def get_company_snapshot(ticker: str) -> dict:
         "exchange": info.get("exchange"),
         "country": info.get("country"),
     }
-    return snapshot
 
 
 def analyze_ticker(ticker: str, period: str = "1y", interval: str = "1d") -> dict:
-    """
-    High-level function: pulls price data + company info and returns a clean dict
-    that we will feed into the learning / quiz parts.
-    """
     ticker = ticker.upper()
     price_df = get_price_history(ticker, period=period, interval=interval)
     price_metrics = compute_price_metrics(price_df)
@@ -106,7 +152,6 @@ def analyze_ticker(ticker: str, period: str = "1y", interval: str = "1d") -> dic
 
 
 def _fmt_pct(value: float) -> str:
-    """Helper to format a float as a percentage with 2 decimals."""
     return f"{value:.2f}%"
 
 
@@ -114,10 +159,7 @@ def generate_learning_report(
     ticker: str, analysis: dict, user_level: str, model: str = "offline"
 ) -> str:
     """
-    OFFLINE version of the learning report.
-
-    No OpenAI calls. We generate a structured markdown explanation using
-    the computed metrics and company snapshot.
+    OFFLINE version of the learning report (no external AI calls).
     """
     company = analysis.get("company", {}) or {}
     metrics = analysis.get("price_metrics", {}) or {}
@@ -126,7 +168,6 @@ def generate_learning_report(
     period = analysis.get("period", "1y")
     interval = analysis.get("interval", "1d")
 
-    # Extract with safe defaults
     name = company.get("short_name") or company.get("long_name") or ticker
     sector = company.get("sector") or "N/A"
     industry = company.get("industry") or "N/A"
@@ -134,21 +175,18 @@ def generate_learning_report(
     exchange = company.get("exchange") or "N/A"
     currency = company.get("currency") or "N/A"
 
-    last_price = metrics.get("last_price")
-    start_price = metrics.get("start_price")
-    period_return = metrics.get("period_return_pct")
-    daily_vol = metrics.get("daily_volatility_pct")
-    ann_vol = metrics.get("annualized_volatility_pct")
-    max_dd = metrics.get("max_drawdown_pct")
-    mean_ret = metrics.get("mean_daily_return_pct")
-    min_price = metrics.get("min_price")
-    max_price = metrics.get("max_price")
+    last_price = metrics.get("last_price", 0.0)
+    start_price = metrics.get("start_price", 0.0)
+    period_return = metrics.get("period_return_pct", 0.0)
+    daily_vol = metrics.get("daily_volatility_pct", 0.0)
+    ann_vol = metrics.get("annualized_volatility_pct", 0.0)
+    max_dd = metrics.get("max_drawdown_pct", 0.0)
+    mean_ret = metrics.get("mean_daily_return_pct", 0.0)
+    min_price = metrics.get("min_price", 0.0)
+    max_price = metrics.get("max_price", 0.0)
 
-    # Basic interpretation sentences
-    direction = "increased" if (period_return or 0) >= 0 else "decreased"
-    risk_level = (
-        "low" if (ann_vol or 0) < 15 else "moderate" if (ann_vol or 0) < 30 else "high"
-    )
+    direction = "increased" if period_return >= 0 else "decreased"
+    risk_level = "low" if ann_vol < 15 else "moderate" if ann_vol < 30 else "high"
 
     report = f"""# 1. Company Snapshot
 
@@ -158,32 +196,24 @@ def generate_learning_report(
 - **Exchange / Country**: {exchange} / {country}
 - **Trading Currency**: {currency}
 
-This section gives you basic identification information about the company so you
-know *what* you are studying before looking at any numbers.
-
 ---
 
 # 2. Price & Volatility Overview
 
-We looked at **{ticker}** over a **{period}** period, using a **{interval}** interval.
+We looked at **{ticker}** over **{period}** using **{interval}** data.
 
-- **Start price**: {start_price:.2f} {currency} (beginning of period)
-- **Last price**: {last_price:.2f} {currency} (most recent)
-- **Total price change over the period**: {_fmt_pct(period_return)} ({direction})
-- **Daily volatility** (typical day-to-day move): {_fmt_pct(daily_vol)}
-- **Annualized volatility** (scaled to a year): {_fmt_pct(ann_vol)} → interpreted as **{risk_level} volatility**
-- **Maximum drawdown** (worst peak-to-trough drop): {_fmt_pct(max_dd)}
+- **Start price**: {start_price:.2f} {currency}
+- **Last price**: {last_price:.2f} {currency}
+- **Total return**: {_fmt_pct(period_return)} ({direction})
+- **Daily volatility**: {_fmt_pct(daily_vol)}
+- **Annualized volatility**: {_fmt_pct(ann_vol)} → **{risk_level} volatility**
+- **Maximum drawdown**: {_fmt_pct(max_dd)}
 - **Average daily return**: {_fmt_pct(mean_ret)}
-- **Price range** during period: {min_price:.2f} – {max_price:.2f} {currency}
-
-These numbers help you understand both **performance** (returns) and **risk**
-(volatility and drawdown).
+- **Price range**: {min_price:.2f} – {max_price:.2f} {currency}
 
 ---
 
 # 3. Fundamentals Overview (High Level)
-
-If available, we also check simple fundamental indicators:
 
 - **Market capitalization**: {company.get("market_cap", "N/A")}
 - **Trailing P/E ratio**: {company.get("trailing_pe", "N/A")}
@@ -191,66 +221,8 @@ If available, we also check simple fundamental indicators:
 - **Dividend yield**: {company.get("dividend_yield", "N/A")}
 - **Beta (vs. market)**: {company.get("beta", "N/A")}
 
-These numbers describe how expensive the stock is relative to its earnings,
-whether it pays dividends, and how much it tends to move compared with the
-overall market (via beta).
-
 ---
 
-# 4. Key Learning Points for This Stock
-
-1. **Direction of performance**
-   Over the selected period, the price has **{direction}** by {_fmt_pct(period_return)}.
-   This does *not* mean it will continue doing the same thing in the future—
-   it simply tells you what happened historically.
-
-2. **Risk & volatility**
-   An annualized volatility of {_fmt_pct(ann_vol)} suggests **{risk_level} price
-   fluctuations**. Higher volatility means the stock's price tends to move
-   around more from day to day.
-
-3. **Drawdowns matter**
-   The maximum drawdown of {_fmt_pct(max_dd)} shows how much the stock could
-   fall from a previous peak. This is important for understanding how
-   uncomfortable a bad period might feel for an investor.
-
-4. **Daily returns**
-   The average daily return of {_fmt_pct(mean_ret)} gives a sense of the
-   direction of returns, but it should always be considered together with
-   volatility and drawdowns.
-
-5. **Fundamentals (if available)**
-   Ratios like P/E and dividend yield help describe how the market is
-   currently valuing the company and whether it returns cash to shareholders.
-
----
-
-# 5. Glossary of Terms (Level: {user_level})
-
-- **Volatility** – A measure of how much the price moves around. Higher
-  volatility means larger, more frequent price swings.
-
-- **Annualized volatility** – The daily volatility scaled to a yearly number.
-  It allows you to compare risk levels between different stocks.
-
-- **Drawdown** – The percentage drop from a previous high to a later low.
-  A large drawdown means the stock experienced a significant downturn.
-
-- **Market capitalization** – The total value of all shares (share price ×
-  number of shares). Roughly, how large the company is in the market.
-
-- **P/E ratio (Price/Earnings)** – The stock price divided by earnings per
-  share. It is one way of expressing how much investors are paying per unit
-  of current or expected earnings.
-
-- **Dividend yield** – Annual dividends per share divided by price. Shows how
-  much cash return (as dividends) the stock generates relative to its price.
-
----
-
-This report is generated in **offline educational mode**: it is designed to
-teach you how to read basic market statistics.
-**This report is for educational purposes only and is not financial advice.**
+**Educational mode only. Not financial advice.**
 """
-
     return report
