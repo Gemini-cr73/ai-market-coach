@@ -15,16 +15,19 @@ AI Market Coach helps users learn market concepts by turning raw market data int
 > ⚠️ **Disclaimer:** This project is for educational purposes only and does not provide financial, trading, or investment advice.
 
 ## 🌐 Live Links (Production)
-- **UI:** https://market.ai-coach-lab.com
-- **API Docs (Swagger):** https://market-api.ai-coach-lab.com/docs
-- **Health Check:** https://market-api.ai-coach-lab.com/health
+
+- **UI:** https://market.ai-coach-lab.com  
+- **API Docs (Swagger):** https://market-api.ai-coach-lab.com/docs  
+- **Health Check:** https://market-api.ai-coach-lab.com/health  
 
 ## 🎯 Purpose of the Project
+
 Most beginners can look up a stock price — but struggle to understand what returns, volatility, and drawdown *mean*.  
 AI Market Coach bridges that gap by combining:
-- market data retrieval,
-- analytics,
-- and AI-powered teaching explanations (Ollama optional).
+
+- market data retrieval (`yfinance`)
+- analytics (returns, volatility, max drawdown)
+- optional AI-powered teaching explanations (Ollama)
 
 ## ✅ Application Features
 
@@ -40,22 +43,24 @@ AI Market Coach bridges that gap by combining:
 ## 🧠 System Architecture
 
 ### Architecture Overview (Production)
+
 You have **two Azure App Services** (two containers):
-- **UI Web App**: Streamlit (public website) → `market.ai-coach-lab.com`
-- **API Web App**: FastAPI (public API, called by UI) → `market-api.ai-coach-lab.com`
+
+- **UI Web App:** Streamlit (public website) → `market.ai-coach-lab.com`  
+- **API Web App:** FastAPI (public API, called by UI) → `market-api.ai-coach-lab.com`
 
 Cloudflare provides DNS (CNAME), and Azure provides **custom domain + SSL** on App Service.
 
-### 🏗️ SYSTEM ARCHITECTURE (Diagram)
+### 🏗️ SYSTEM ARCHITECTURE (Production Diagram)
 
-> ✅ Copy/paste this Mermaid diagram into GitHub README (it will render automatically if Mermaid is enabled).
-> If you prefer an image diagram, export it later as `docs/architecture.png`.
+> ✅ Copy/paste this Mermaid diagram into GitHub README (renders automatically if Mermaid is enabled).  
+> 🖼️ If you prefer an image diagram, export it later as `docs/architecture-prod.png`.
 
 ```mermaid
 flowchart LR
-  U["User (Browser)"] --> UI["Streamlit UI<br/>market.ai-coach-lab.com<br/>(Azure App Service: ai-market-coach-ui-prod)"]
+  U["User (Browser)"] --> UI["Streamlit UI<br/>market.ai-coach-lab.com<br/>(Azure App Service: UI)"]
   CF["Cloudflare DNS<br/>(CNAME)"] --> UI
-  UI -->|HTTPS JSON| API["FastAPI API<br/>market-api.ai-coach-lab.com<br/>(Azure App Service: ai-market-coach-api-prod)"]
+  UI -->|HTTPS JSON| API["FastAPI API<br/>market-api.ai-coach-lab.com<br/>(Azure App Service: API)"]
   API --> YF["Market Data Provider<br/>(yfinance)"]
   API --> AN["Analytics Engine<br/>(returns, volatility, drawdown)"]
   API --> LLM["LLM Coach (optional)<br/>(Ollama)"]
