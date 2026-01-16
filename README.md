@@ -55,15 +55,12 @@ Cloudflare provides DNS (CNAME), and Azure provides **custom domain + SSL** on A
 
 ```mermaid
 flowchart LR
-  U[User Browser] -->|HTTPS| CF[Cloudflare DNS]
-  CF -->|CNAME -> Azure Web App| UI[Azure App Service: UI (Streamlit)\nai-market-coach-ui-prod\nDockerfile.ui :8501]
+  U[User Browser] -->|HTTPS| UI[Streamlit UI Web App]
+  CF[Cloudflare DNS (CNAME)] --> UI
 
-  UI -->|HTTPS JSON| API[Azure App Service: API (FastAPI)\nai-market-coach-api-prod\nDockerfile.api :8000]
+  UI -->|HTTPS JSON| API[FastAPI API Web App]
+  API --> MD[Market Data: yfinance / provider]
+  API --> AE[Analytics Engine: returns / volatility / drawdown]
+  API --> LLM[LLM Coach (optional): Ollama]
 
-  API --> MD[Market Data Provider\n(yfinance / provider)]
-  API --> AE[Analytics Engine\nReturns / Volatility / Drawdown]
-  API --> LLM[LLM Coach Service\n(Ollama optional)]
-
-  LLM -->|Local Dev: http://localhost:11434\nFuture: Hosted Ollama| OR[Ollama Runtime]
-
-  API -->|/health| HC[Health Check Endpoint]
+  API --> HC[/health endpoint/]
