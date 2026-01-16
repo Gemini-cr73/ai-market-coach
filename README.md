@@ -15,11 +15,9 @@ AI Market Coach helps users learn market concepts by turning raw market data int
 > ⚠️ **Disclaimer:** This project is for educational purposes only and does not provide financial, trading, or investment advice.
 
 ## 🌐 Live Links (Production)
-- **UI:** `https://<ui-domain>`
-- **API Docs (Swagger):** `https://<api-domain>/docs`
-- **Health Check:** `https://<api-domain>/health`
-
-> Replace the placeholders with your real domains.
+- **UI:** https://market.ai-coach-lab.com
+- **API Docs (Swagger):** https://market-api.ai-coach-lab.com/docs
+- **Health Check:** https://market-api.ai-coach-lab.com/health
 
 ## 🎯 Purpose of the Project
 Most beginners can look up a stock price — but struggle to understand what returns, volatility, and drawdown *mean*.  
@@ -43,8 +41,8 @@ AI Market Coach bridges that gap by combining:
 
 ### Architecture Overview (Production)
 You have **two Azure App Services** (two containers):
-- **UI Web App**: Streamlit (public website)
-- **API Web App**: FastAPI (public API, called by UI)
+- **UI Web App**: Streamlit (public website) → `market.ai-coach-lab.com`
+- **API Web App**: FastAPI (public API, called by UI) → `market-api.ai-coach-lab.com`
 
 Cloudflare provides DNS (CNAME), and Azure provides **custom domain + SSL** on App Service.
 
@@ -55,12 +53,10 @@ Cloudflare provides DNS (CNAME), and Azure provides **custom domain + SSL** on A
 
 ```mermaid
 flowchart LR
-  U[User Browser] -->|HTTPS| UI[Streamlit UI Web App]
-  CF[Cloudflare DNS (CNAME)] --> UI
-
-  UI -->|HTTPS JSON| API[FastAPI API Web App]
-  API --> MD[Market Data: yfinance / provider]
-  API --> AE[Analytics Engine: returns / volatility / drawdown]
-  API --> LLM[LLM Coach (optional): Ollama]
-
-  API --> HC[/health endpoint/]
+  U["User (Browser)"] --> UI["Streamlit UI<br/>market.ai-coach-lab.com<br/>(Azure App Service: ai-market-coach-ui-prod)"]
+  CF["Cloudflare DNS<br/>(CNAME)"] --> UI
+  UI -->|HTTPS JSON| API["FastAPI API<br/>market-api.ai-coach-lab.com<br/>(Azure App Service: ai-market-coach-api-prod)"]
+  API --> YF["Market Data Provider<br/>(yfinance)"]
+  API --> AN["Analytics Engine<br/>(returns, volatility, drawdown)"]
+  API --> LLM["LLM Coach (optional)<br/>(Ollama)"]
+  API --> HC["Health Endpoint<br/>(/health)"]
