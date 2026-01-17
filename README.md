@@ -73,7 +73,7 @@ flowchart LR
   API --> DB["Postgres (sessions)"]
   API --> LLM["Ollama (optional)"]
 
-## 🛠 Local Development Setup
+### 🛠 Local Development Setup
 
 This project can be run fully locally using:
 
