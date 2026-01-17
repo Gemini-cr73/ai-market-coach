@@ -72,3 +72,17 @@ flowchart LR
   API --> YF["yfinance market data"]
   API --> DB["Postgres (sessions)"]
   API --> LLM["Ollama (optional)"]
+
+## 🛠 Local Development Setup
+
+This project can be run fully locally using:
+
+- Python virtual environment
+- Dockerized Postgres database
+- Local Ollama (optional)
+
+### 1. Clone Repo
+
+```bash
+git clone https://github.com/Gemini-cr73/ai-market-coach.git
+cd ai-market-coach
