@@ -23,16 +23,16 @@ AI Market Coach helps users learn market concepts by converting historical marke
 ## 🖼️ App Preview
 
 ### Streamlit UI
-
 ![UI Dashboard](docs/screenshots/ui-dashboard.png)
 
 ### API Documentation (Swagger)
-
 ![API Docs](docs/screenshots/api-docs.png)
 
 ### Demo Walkthrough
-
 ![Demo](docs/screenshots/demo.gif)
+
+### Production Architecture
+![Production Architecture](docs/screenshots/architecture-prod.png)
 
 ## ✅ What This App Does
 
