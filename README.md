@@ -58,3 +58,4 @@ flowchart LR
   API --> YF["yfinance market data"]
   API --> DB["Postgres (sessions)"]
   API --> LLM["Ollama (optional)"]
+
