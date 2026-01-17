@@ -6,11 +6,11 @@
   <img src="https://img.shields.io/badge/API-FastAPI-009688?style=for-the-badge&logo=fastapi" />
   <img src="https://img.shields.io/badge/UI-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit" />
   <img src="https://img.shields.io/badge/Containers-Docker-2496ED?style=for-the-badge&logo=docker" />
-  <img src="https://img.shields.io/badge/LLM-Ollama_(Optional)-000000?style=for-the-badge&logo=ollama" />
+  <img src="https://img.shields.io/badge/LLM-Ollama_(Local)-000000?style=for-the-badge&logo=ollama" />
 </p>
 
 **Educational-only stock learning and analytics assistant.**  
-AI Market Coach helps users learn market concepts by turning raw market data into clear metrics + plain-English explanations + practice prompts.
+AI Market Coach helps users learn market concepts by converting historical market data into metrics, plain-English explanations, quizzes, and flashcards.
 
 > ⚠️ **Disclaimer:** This project is for educational purposes only and does not provide financial, trading, or investment advice.
 
@@ -20,48 +20,41 @@ AI Market Coach helps users learn market concepts by turning raw market data int
 - **API Docs (Swagger):** https://market-api.ai-coach-lab.com/docs  
 - **Health Check:** https://market-api.ai-coach-lab.com/health  
 
-## 🎯 Purpose of the Project
+## ✅ What This App Does
 
-Most beginners can look up a stock price — but struggle to understand what returns, volatility, and drawdown *mean*.  
-AI Market Coach bridges that gap by combining:
+AI Market Coach combines:
 
-- market data retrieval (`yfinance`)
-- analytics (returns, volatility, max drawdown)
-- optional AI-powered teaching explanations (Ollama)
+- **Market data retrieval** (`yfinance`)
+- **Analytics** (returns, volatility, drawdown, summary stats)
+- **Optional local LLM coaching** via **Ollama**
+- **Practice mode** via quizzes + flashcards
+- **DB-backed endpoints** (sessions stored in Postgres)
 
-## ✅ Application Features
+## ✅ Features
 
 | Category | Feature | Description |
 |---|---|---|
-| Market Data | Historical price pull | Fetches OHLC/time-series data (ex: via `yfinance`) |
-| Analytics | Core metrics | Returns %, volatility, max drawdown, trend summary |
-| Learning | “Market Coach” explanations | Plain-English educational explanation for metrics |
-| Learning | Practice prompts / quiz mode | Reinforces learning with questions & flashcards |
-| Platform | UI + API separation | Streamlit UI calls FastAPI backend over HTTPS |
-| Deployment | Production-ready | Dockerized and deployed to Azure App Service |
+| Market Data | Historical price pull | Fetches OHLC/time-series data using `yfinance` |
+| Analytics | Core metrics | Returns %, volatility, max drawdown, range summary |
+| Learning | AI learning report | Plain-English learning report (Ollama optional) |
+| Learning | Quiz + flashcards | Practice questions + flashcards returned by API |
+| Backend | Sessions | `/sessions` endpoint stored in Postgres |
+| Platform | UI + API separation | Streamlit UI calls FastAPI backend over HTTP/HTTPS |
+| Deployment | Cloud-ready | Dockerized and deployed to Azure App Service |
 
-## 🧠 System Architecture
+## 🧠 Architecture
 
-### Architecture Overview (Production)
+### Production
 
-You have **two Azure App Services** (two containers):
-
-- **UI Web App:** Streamlit (public website) → `market.ai-coach-lab.com`  
-- **API Web App:** FastAPI (public API, called by UI) → `market-api.ai-coach-lab.com`
-
-Cloudflare provides DNS (CNAME), and Azure provides **custom domain + SSL** on App Service.
-
-### 🏗️ SYSTEM ARCHITECTURE (Production Diagram)
-
-> ✅ Copy/paste this Mermaid diagram into GitHub README (renders automatically if Mermaid is enabled).  
-> 🖼️ If you prefer an image diagram, export it later as `docs/architecture-prod.png`.
+- **Streamlit UI (public):** `market.ai-coach-lab.com`
+- **FastAPI API (public):** `market-api.ai-coach-lab.com`
+- Cloudflare handles DNS (CNAME)
+- Azure App Service handles hosting + SSL
 
 ```mermaid
 flowchart LR
-  U["User (Browser)"] --> UI["Streamlit UI<br/>market.ai-coach-lab.com<br/>(Azure App Service: UI)"]
-  CF["Cloudflare DNS<br/>(CNAME)"] --> UI
-  UI -->|HTTPS JSON| API["FastAPI API<br/>market-api.ai-coach-lab.com<br/>(Azure App Service: API)"]
-  API --> YF["Market Data Provider<br/>(yfinance)"]
-  API --> AN["Analytics Engine<br/>(returns, volatility, drawdown)"]
-  API --> LLM["LLM Coach (optional)<br/>(Ollama)"]
-  API --> HC["Health Endpoint<br/>(/health)"]
+  U["User (Browser)"] --> UI["Streamlit UI<br/>market.ai-coach-lab.com"]
+  UI -->|HTTPS JSON| API["FastAPI API<br/>market-api.ai-coach-lab.com"]
+  API --> YF["yfinance market data"]
+  API --> DB["Postgres (sessions)"]
+  API --> LLM["Ollama (optional)"]
