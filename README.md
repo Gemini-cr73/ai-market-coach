@@ -18,7 +18,21 @@ AI Market Coach helps users learn market concepts by converting historical marke
 
 - **UI:** https://market.ai-coach-lab.com  
 - **API Docs (Swagger):** https://market-api.ai-coach-lab.com/docs  
-- **Health Check:** https://market-api.ai-coach-lab.com/health  
+- **Health Check:** https://market-api.ai-coach-lab.com/health
+
+## 🖼️ App Preview
+
+### Streamlit UI
+
+![UI Dashboard](docs/screenshots/ui-dashboard.png)
+
+### API Documentation (Swagger)
+
+![API Docs](docs/screenshots/api-docs.png)
+
+### Demo Walkthrough
+
+![Demo](docs/screenshots/demo.gif)
 
 ## ✅ What This App Does
 
@@ -58,4 +72,3 @@ flowchart LR
   API --> YF["yfinance market data"]
   API --> DB["Postgres (sessions)"]
   API --> LLM["Ollama (optional)"]
-
