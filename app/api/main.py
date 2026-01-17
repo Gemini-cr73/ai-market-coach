@@ -1,5 +1,4 @@
 # app/api/main.py
-
 from __future__ import annotations
 
 import json
@@ -9,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
+from app.api.routes import router as api_router
 from app.core.analysis import analyze_ticker, generate_learning_report
 from app.core.learning import generate_quiz_and_flashcards
 
@@ -17,7 +17,7 @@ class AnalysisRequest(BaseModel):
     """
     Request body for /analyze.
 
-    Expected JSON from the front-end:
+    Expected JSON:
     {
       "ticker": "AAPL",
       "period": "1y",
@@ -65,7 +65,6 @@ class AnalysisRequest(BaseModel):
     def validate_user_level(cls, v: str) -> str:
         allowed = {"Beginner", "Intermediate", "Advanced"}
         v = (v or "Beginner").strip()
-        # normalize common variants
         v_norm = v.capitalize()
         if v_norm not in allowed:
             raise ValueError(f"Invalid user_level '{v}'. Allowed: {sorted(allowed)}")
@@ -78,15 +77,28 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# Allow Streamlit to talk to this API (local + deploy).
-# Tighten allow_origins later to your deployed UI domain(s).
+
+@app.on_event("startup")
+def on_startup() -> None:
+    """
+    Create DB tables at startup (temporary until Alembic migrations).
+    Importing here avoids any DB-related side effects during module import.
+    """
+    from app.db.database import engine
+    from app.db.models import Base
+
+    Base.metadata.create_all(bind=engine)
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # tighten later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(api_router)
 
 
 @app.get("/")
@@ -101,12 +113,10 @@ def root():
 
 @app.get("/health")
 def health():
-    """Simple health-check endpoint."""
     return {"status": "ok"}
 
 
 def _safe_json_dump(obj: Any) -> str:
-    """Best-effort JSON serialization for fallback output."""
     try:
         return json.dumps(obj, indent=2, default=str)
     except Exception:
@@ -115,15 +125,9 @@ def _safe_json_dump(obj: Any) -> str:
 
 @app.post("/analyze")
 def analyze(request: AnalysisRequest) -> dict[str, Any]:
-    """
-    Main analysis endpoint.
+    ticker = request.ticker
 
-    - Always tries to return *something* useful.
-    - Only fails hard if we cannot even get market data.
-    """
-    ticker = request.ticker  # already validated + normalized
-
-    # 1) CORE ANALYSIS (must succeed, otherwise we error)
+    # 1) CORE ANALYSIS (must succeed)
     try:
         raw_analysis = analyze_ticker(
             ticker,
@@ -131,21 +135,15 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
             interval=request.interval,
         )
     except ValueError as ve:
-        # e.g. invalid ticker / no data
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
-        # serious internal error in the data layer
         raise HTTPException(
             status_code=500,
             detail=f"Internal error while fetching/processing data: {e}",
         )
 
     # 2) AI LEARNING REPORT (best effort)
-    report_markdown = ""
     try:
-        # Support both common signatures:
-        #   generate_learning_report(ticker, raw_analysis, user_level=...)
-        #   generate_learning_report(raw_analysis, user_level=...)
         try:
             report_markdown = generate_learning_report(
                 ticker,
@@ -168,13 +166,10 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
             "```"
         )
 
-    # 3) QUIZ + FLASHCARDS (best effort, unique feature)
-    quiz = []
-    flashcards = []
+    # 3) QUIZ + FLASHCARDS (best effort)
+    quiz: list[Any] = []
+    flashcards: list[Any] = []
     try:
-        # Support both signatures:
-        #   generate_quiz_and_flashcards(ticker, raw_analysis, user_level=..., num_questions=...)
-        #   generate_quiz_and_flashcards(ticker, raw_analysis, user_level=...)
         try:
             deck = generate_quiz_and_flashcards(
                 ticker,
@@ -193,8 +188,7 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
             quiz = deck.get("quiz", []) or []
             flashcards = deck.get("flashcards", []) or []
     except Exception:
-        quiz = []
-        flashcards = []
+        pass
 
     return {
         "ticker": ticker,

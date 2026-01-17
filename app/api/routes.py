@@ -5,11 +5,18 @@ import hashlib
 import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.analysis import analyze_ticker, generate_learning_report
 from app.core.learning import generate_quiz_and_flashcards
+
+# DB (Phase 2)
+from app.db.database import get_db
+from app.db.models import MarketSession, User
+from app.db.schemas import SessionCreate, SessionOut
 
 router = APIRouter()
 
@@ -42,6 +49,35 @@ def stable_seed(ticker: str, period: str, interval: str, user_level: str) -> int
     key = f"{t}|{p}|{i}|{u}".encode()
     digest = hashlib.sha256(key).hexdigest()
     return int(digest[:8], 16)
+
+
+@router.post("/sessions", response_model=SessionOut, tags=["Sessions"])
+def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
+    """
+    Persist a user's market analysis session to Postgres.
+
+    This supports Phase 2 features:
+    - learning history
+    - progress tracking
+    - adaptive coaching based on past activity
+    """
+    # upsert user by email
+    user = db.scalar(select(User).where(User.email == payload.email))
+    if not user:
+        user = User(email=payload.email)
+        db.add(user)
+        db.flush()  # assigns user.id
+
+    sess = MarketSession(
+        user_id=user.id,
+        ticker=payload.ticker.upper(),
+        period=payload.period,
+        metrics_json=payload.metrics_json,
+    )
+    db.add(sess)
+    db.commit()
+    db.refresh(sess)
+    return sess
 
 
 @router.post("/analyze")

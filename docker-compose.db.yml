@@ -1,0 +1,33 @@
+services:
+  market-postgres:
+    image: postgres:16
+    container_name: market-postgres
+    environment:
+      POSTGRES_USER: market
+      POSTGRES_PASSWORD: market_pw
+      POSTGRES_DB: market_coach_db
+    ports:
+      - "5433:5432"   # Postgres: host 5433 -> container 5432
+    volumes:
+      - market_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U market -d market_coach_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  market-pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: market-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin_pw
+    ports:
+      - "5050:80"     # pgAdmin web UI: host 5050 -> container 80
+    depends_on:
+      market-postgres:
+        condition: service_healthy
+
+volumes:
+  market_pgdata:
+
