@@ -16,7 +16,8 @@ AI Market Coach helps users learn market concepts by converting historical marke
 
 ## 🌐 Live Links (Production)
 
-- **UI:** https://market.ai-coach-lab.com  
+- **UI:** https://crb-ai-market-coach.streamlit.app  
+- **API Base:** https://market-api.ai-coach-lab.com  
 - **API Docs (Swagger):** https://market-api.ai-coach-lab.com/docs  
 - **Health Check:** https://market-api.ai-coach-lab.com/health
 
