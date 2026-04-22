@@ -2,10 +2,11 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Live-brightgreen?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Cloud-Azure_App_Service-0078D4?style=for-the-badge&logo=microsoftazure" />
+  <img src="https://img.shields.io/badge/Cloud-Railway-0B0D0E?style=for-the-badge&logo=railway" />
   <img src="https://img.shields.io/badge/API-FastAPI-009688?style=for-the-badge&logo=fastapi" />
   <img src="https://img.shields.io/badge/UI-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit" />
   <img src="https://img.shields.io/badge/Containers-Docker-2496ED?style=for-the-badge&logo=docker" />
+  <img src="https://img.shields.io/badge/Database-PostgreSQL-336791?style=for-the-badge&logo=postgresql" />
   <img src="https://img.shields.io/badge/LLM-Ollama_(Local)-000000?style=for-the-badge&logo=ollama" />
 </p>
 
@@ -19,7 +20,7 @@ AI Market Coach helps users learn market concepts by converting historical marke
 - **UI:** https://crb-ai-market-coach.streamlit.app  
 - **API Base:** https://market-api.ai-coach-lab.com  
 - **API Docs (Swagger):** https://market-api.ai-coach-lab.com/docs  
-- **Health Check:** https://market-api.ai-coach-lab.com/health
+- **Health Check:** https://market-api.ai-coach-lab.com/health  
 
 ## 🖼️ App Preview
 
@@ -55,21 +56,22 @@ AI Market Coach combines:
 | Learning | Quiz + flashcards | Practice questions + flashcards returned by API |
 | Backend | Sessions | `/sessions` endpoint stored in Postgres |
 | Platform | UI + API separation | Streamlit UI calls FastAPI backend over HTTP/HTTPS |
-| Deployment | Cloud-ready | Dockerized and deployed to Azure App Service |
+| Deployment | Cloud-ready | Dockerized and deployed to Railway |
 
 ## 🧠 Architecture
 
 ### Production
 
-- **Streamlit UI (public):** `market.ai-coach-lab.com`
+- **Streamlit UI (public):** `crb-ai-market-coach.streamlit.app`
 - **FastAPI API (public):** `market-api.ai-coach-lab.com`
-- Cloudflare handles DNS (CNAME)
-- Azure App Service handles hosting + SSL
+- **Postgres database:** Railway Postgres
+- Cloudflare handles DNS and SSL
+- Railway handles API hosting
 
 ```mermaid
 flowchart LR
-  U["User (Browser)"] --> UI["Streamlit UI<br/>market.ai-coach-lab.com"]
+  U["User (Browser)"] --> UI["Streamlit UI<br/>crb-ai-market-coach.streamlit.app"]
   UI -->|HTTPS JSON| API["FastAPI API<br/>market-api.ai-coach-lab.com"]
   API --> YF["yfinance market data"]
-  API --> DB["Postgres (sessions)"]
+  API --> DB["Postgres (Railway)"]
   API --> LLM["Ollama (optional)"]
